@@ -28,6 +28,8 @@
     details: {},
     matchId: null,
     userPickedMatch: false,
+    liveBroken: false,
+    snapshotMode: false,
     detail: null,
     comments: null,
     generatedAt: null,
@@ -83,6 +85,12 @@
     } catch (error) {
       return date.toLocaleTimeString('ru-RU');
     }
+  }
+
+  /** Подпись со временем обновления; помечает режим снимка. */
+  function metaText() {
+    var stamp = clockTime(new Date(state.generatedAt || state.updatedAt || Date.now()));
+    return 'Данные обновлены в ' + stamp + (state.snapshotMode ? ' · снимок' : '');
   }
 
   function relative(iso) {
@@ -357,15 +365,13 @@
 
   /* -------------------------------------------------------------- loading --- */
 
-  /** Загружает список матчей: с бэкенда или из снимка. */
-  function loadMatches(force) {
-    if (LIVE) {
-      return getJson(API_BASE + '/api/matches').then(function (payload) {
-        state.matches = payload.matches || [];
-        state.today = payload.today || '';
-        state.updatedAt = payload.updatedAt || null;
-      });
-    }
+  /** Живой API доступен: задан адрес и он ещё не отвалился. */
+  function liveAvailable() {
+    return LIVE && !state.liveBroken;
+  }
+
+  /** Загружает список матчей из локального снимка. */
+  function loadSnapshotMatches(force) {
     var url = SNAPSHOT_URL;
     if (force) url += '?t=' + Date.now(); // обходим кэш CDN GitHub Pages
     return getJson(url).then(function (snapshot) {
@@ -373,36 +379,91 @@
       state.today = snapshot.today || '';
       state.details = snapshot.details || {};
       state.generatedAt = snapshot.generatedAt || null;
+      state.snapshotMode = true;
     });
+  }
+
+  /**
+   * Загружает список матчей: с живого бэкенда, а при недоступности — из снимка.
+   */
+  function loadMatches(force) {
+    if (liveAvailable()) {
+      return getJson(API_BASE + '/api/matches' + (force ? '?refresh=1' : ''))
+        .then(function (payload) {
+          state.matches = payload.matches || [];
+          state.today = payload.today || '';
+          state.updatedAt = payload.updatedAt || null;
+          state.snapshotMode = false;
+        })
+        .catch(function () {
+          // Живой API недоступен (например, заблокирован домен) — откатываемся на снимок.
+          state.liveBroken = true;
+          return loadSnapshotMatches(force);
+        });
+    }
+    return loadSnapshotMatches(force);
+  }
+
+  /**
+   * Переносит счёт и статус из страницы матча в запись списка,
+   * чтобы подпись выбранного матча обновлялась вместе с трансляцией.
+   */
+  function syncMatchFromDetail(matchId, detail) {
+    if (!detail) return;
+    for (var i = 0; i < state.matches.length; i += 1) {
+      var entry = state.matches[i];
+      if (entry.id !== matchId) continue;
+      if (detail.score) entry.score = detail.score;
+      if (detail.status) {
+        entry.status = detail.status;
+        entry.live = /период|тайм|овертайм/i.test(detail.status);
+      }
+      return;
+    }
   }
 
   /** Загружает трансляцию выбранного матча. */
   function loadDetail(matchId, force) {
-    if (LIVE) {
-      return getJson(API_BASE + '/api/match/' + matchId + (force ? '?refresh=1' : '')).then(function (
-        payload,
-      ) {
-        state.detail = payload.match || null;
-        state.updatedAt = payload.updatedAt || state.updatedAt;
-      });
+    if (liveAvailable()) {
+      return getJson(API_BASE + '/api/match/' + matchId + (force ? '?refresh=1' : ''))
+        .then(function (payload) {
+          state.detail = payload.match || null;
+          state.updatedAt = payload.updatedAt || state.updatedAt;
+          syncMatchFromDetail(matchId, state.detail);
+        })
+        .catch(function () {
+          state.liveBroken = true;
+          state.detail = state.details[matchId] || null;
+        });
     }
     state.detail = state.details[matchId] || null;
+    syncMatchFromDetail(matchId, state.detail);
     return Promise.resolve();
   }
 
   /** Загружает комментарии выбранного матча. */
   function loadComments(matchId, force) {
-    if (LIVE) {
-      return getJson(
-        API_BASE + '/api/comments/' + matchId + (force ? '?refresh=1' : ''),
-      ).then(function (payload) {
-        state.comments = {
-          roots: payload.roots || [],
-          total: payload.total || 0,
-          sourceUrl: payload.sourceUrl || null,
-        };
-        state.updatedAt = payload.updatedAt || state.updatedAt;
-      });
+    if (liveAvailable()) {
+      return getJson(API_BASE + '/api/comments/' + matchId + (force ? '?refresh=1' : ''))
+        .then(function (payload) {
+          state.comments = {
+            roots: payload.roots || [],
+            total: payload.total || 0,
+            sourceUrl: payload.sourceUrl || null,
+          };
+          state.updatedAt = payload.updatedAt || state.updatedAt;
+        })
+        .catch(function () {
+          state.liveBroken = true;
+          var failed = state.details[matchId] || null;
+          state.comments = failed
+            ? {
+                roots: failed.comments || [],
+                total: failed.commentsTotal || 0,
+                sourceUrl: failed.url || null,
+              }
+            : null;
+        });
     }
     var detail = state.details[matchId] || null;
     state.comments = detail
@@ -415,8 +476,7 @@
   function refreshAll(force) {
     return loadMatches(force).then(function () {
       renderMatchOptions();
-      el.globalMeta.textContent =
-        'Данные обновлены в ' + clockTime(new Date(state.generatedAt || state.updatedAt || Date.now()));
+      el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, force), loadComments(state.matchId, force)]).then(
         function () {
           renderBroadcast();
@@ -429,10 +489,11 @@
   function refreshBroadcast(force) {
     return loadMatches(force)
       .then(function () {
-        renderMatchOptions();
         return loadDetail(state.matchId, force);
       })
       .then(function () {
+        // Подписи перерисовываем после детализации: счёт и статус подтягиваются из неё.
+        renderMatchOptions();
         renderBroadcast();
       });
   }
@@ -554,8 +615,7 @@
         state.matchId = hashed;
       }
       renderMatchOptions();
-      el.globalMeta.textContent =
-        'Данные обновлены в ' + clockTime(new Date(state.generatedAt || Date.now()));
+      el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, false), loadComments(state.matchId, false)]).then(
         function () {
           renderBroadcast();
