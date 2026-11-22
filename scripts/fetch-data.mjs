@@ -15,7 +15,7 @@ import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { fetchComments, fetchMatch, fetchMatches } from './championat.mjs';
+import { enrichLiveMatches, fetchComments, fetchMatch, fetchMatches } from './championat.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = join(ROOT, 'site');
@@ -43,6 +43,8 @@ function moscowToday() {
 async function main() {
   const startedAt = Date.now();
   const matches = await fetchMatches();
+  // Таблица матчей championat.com заморожена — уточняем идущие и стартующие.
+  await enrichLiveMatches(matches, 3);
   const today = moscowToday();
 
   // Сегодняшние матчи, идущий матч и пара последних завершённых —

@@ -352,6 +352,69 @@ export async function fetchMatch(matchId, tournamentId = KHL_TOURNAMENT_ID) {
   };
 }
 
+/**
+ * Обогащает список свежими статусами и счётом со страниц самих матчей.
+ *
+ * Таблица матчей championat.com отдаёт замороженные данные: идущий матч
+ * может ещё числиться «Не начался», а счёт отставать на несколько голов.
+ * Поэтому для идущих и стартующих матчей запрашиваем их страницы напрямую.
+ *
+ * @param {Array} matches список матчей
+ * @param {number} limit сколько матчей уточнять за раз
+ * @returns {Promise<Array>} тот же список с обновлёнными статусом и счётом
+ */
+export async function enrichLiveMatches(matches, limit = 3) {
+  const now = Date.now();
+  const candidates = matches
+    .filter((match) => {
+      if (match.live) return true;
+      if (!match.startsAt) return false;
+      const diff = new Date(match.startsAt).getTime() - now;
+      // Матчи, которые начались недавно или начнутся в ближайшие два часа.
+      return diff > -3 * 60 * 60 * 1000 && diff < 2 * 60 * 60 * 1000;
+    })
+    .sort((a, b) => {
+      if (a.live !== b.live) return a.live ? -1 : 1;
+      return (a.startsAt ?? '').localeCompare(b.startsAt ?? '');
+    })
+    .slice(0, limit);
+
+  await Promise.all(
+    candidates.map(async (match) => {
+      try {
+        const detail = await fetchMatchSummary(match.id);
+        if (detail.status) match.status = detail.status;
+        if (detail.score) match.score = detail.score;
+        match.live = /период|тайм|таймаут|буллит|овертайм|перерыв/i.test(detail.status || '');
+        if (match.live && !match.score) match.score = '0 : 0';
+      } catch {
+        /* не удалось уточнить — оставляем данные из таблицы */
+      }
+    }),
+  );
+
+  return matches;
+}
+
+/**
+ * Быстрое извлечение статуса и счёта со страницы матча.
+ *
+ * Полный разбор страницы ради двух значений слишком дорог: страница весит
+ * около 570 КБ. Здесь обходятся два точечных регулярных выражения.
+ *
+ * @param {string} matchId идентификатор матча
+ */
+export async function fetchMatchSummary(matchId) {
+  const url = `https://www.championat.com/hockey/_superleague/tournament/${KHL_TOURNAMENT_ID}/match/${matchId}/?text-all`;
+  const html = await fetchText(url);
+  const status = /class="[^"]*match-info__status[^"]*"[^>]*>([\s\S]*?)<\//.exec(html);
+  const score = /class="[^"]*match-info__score-total[^"]*"[^>]*>([\s\S]*?)<\//.exec(html);
+  return {
+    status: status ? plainText(status[1]) : '',
+    score: score ? plainText(score[1]).replace(/\s+/g, ' ').trim() : '',
+  };
+}
+
 /* -------------------------------------------------------------- comments --- */
 
 /** Fetches the match comments thread from the Rambler Comments widget API. */
