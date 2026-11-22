@@ -475,10 +475,12 @@
   /** Полное обновление: список, трансляция и комментарии. */
   function refreshAll(force) {
     return loadMatches(force).then(function () {
-      renderMatchOptions();
       el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, force), loadComments(state.matchId, force)]).then(
         function () {
+          // Подписи списка рисуем после детализации: в live-таблице championat.com
+          // счёт и статус отстают, актуальные значения лежат на странице матча.
+          renderMatchOptions();
           renderBroadcast();
           renderComments();
         },
@@ -614,10 +616,11 @@
       if (hashed && state.matches.some(function (m) { return m.id === hashed; })) {
         state.matchId = hashed;
       }
-      renderMatchOptions();
       el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, false), loadComments(state.matchId, false)]).then(
         function () {
+          // Счёт и статус подтягиваются со страницы матча — рисуем подписи после неё.
+          renderMatchOptions();
           renderBroadcast();
           renderComments();
         },
