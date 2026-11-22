@@ -363,7 +363,7 @@ export async function fetchMatch(matchId, tournamentId = KHL_TOURNAMENT_ID) {
  * @param {number} limit сколько матчей уточнять за раз
  * @returns {Promise<Array>} тот же список с обновлёнными статусом и счётом
  */
-export async function enrichLiveMatches(matches, limit = 3) {
+export async function enrichLiveMatches(matches, limit = 5) {
   const now = Date.now();
   const candidates = matches
     .filter((match) => {
@@ -371,7 +371,7 @@ export async function enrichLiveMatches(matches, limit = 3) {
       if (!match.startsAt) return false;
       const diff = new Date(match.startsAt).getTime() - now;
       // Матчи, которые начались недавно или начнутся в ближайшие два часа.
-      return diff > -3 * 60 * 60 * 1000 && diff < 2 * 60 * 60 * 1000;
+      return diff > -4 * 60 * 60 * 1000 && diff < 2 * 60 * 60 * 1000;
     })
     .sort((a, b) => {
       if (a.live !== b.live) return a.live ? -1 : 1;

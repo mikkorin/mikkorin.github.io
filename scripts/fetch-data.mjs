@@ -44,7 +44,7 @@ async function main() {
   const startedAt = Date.now();
   const matches = await fetchMatches();
   // Таблица матчей championat.com заморожена — уточняем идущие и стартующие.
-  await enrichLiveMatches(matches, 3);
+  await enrichLiveMatches(matches, 5);
   const today = moscowToday();
 
   // Сегодняшние матчи, идущий матч и пара последних завершённых —
