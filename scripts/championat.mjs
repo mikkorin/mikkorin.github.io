@@ -129,9 +129,15 @@ export function plainText(html) {
   ).trim();
 }
 
-function tagText(block, tag) {
-  const match = block.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return match ? plainText(match[1]) : '';
+/**
+ * Возвращает текст элемента, найденного по CSS-классу.
+ *
+ * Раньше здесь искали HTML-тег с именем класса (например, <livetable-event__status>),
+ * чего в разметке championat.com нет: это классы, а не теги. Из-за этого статус
+ * live-таблицы всегда был пустым и подменялся на «Не начался».
+ */
+function classText(html, className) {
+  return plainText(innerByClass(html, className));
 }
 
 /* --------------------------------------------------------- HTML scanning --- */
@@ -215,9 +221,9 @@ export function parseMatchList(html) {
     live.set(href[2], {
       url: href[1].startsWith('http') ? href[1] : `https://www.championat.com${href[1]}`,
       teams,
-      score: tagText(block, 'livetable-event__result').replace(/–/g, '–').trim(),
-      status: tagText(block, 'livetable-event__status'),
-      time: tagText(block, 'livetable-event__time'),
+      score: classText(block, 'livetable-event__result'),
+      status: classText(block, 'livetable-event__status'),
+      time: classText(block, 'livetable-event__time'),
     });
   }
 

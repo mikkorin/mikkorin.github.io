@@ -9,7 +9,7 @@
  * Если перед подключением скрипта задать window.API_BASE (например,
  * https://example.com), клиент переключится на живой бэкенд по маршрутам
  * /api/matches, /api/match/:id, /api/comments/:id — это тот же контракт,
- * что у Mini App.
+ * что у Mini App. Пустая строка означает «живой API на том же origin».
  */
 (function () {
   'use strict';
@@ -17,7 +17,9 @@
   var DEFAULT_INTERVAL_MS = 60000;
   var SOON_WINDOW_MS = 60 * 60 * 1000;
   var MOSCOW = 'Europe/Moscow';
-  var API_BASE = (typeof window !== 'undefined' && window.API_BASE) || '';
+  // window.API_BASE не задан → статический снимок; задан (в том числе пустой) → живой API.
+  var LIVE = typeof window !== 'undefined' && typeof window.API_BASE === 'string';
+  var API_BASE = LIVE ? window.API_BASE : '';
   var SNAPSHOT_URL = 'data/snapshot.json';
 
   var state = {
@@ -25,6 +27,7 @@
     today: '',
     details: {},
     matchId: null,
+    userPickedMatch: false,
     detail: null,
     comments: null,
     generatedAt: null,
@@ -183,6 +186,9 @@
     return null;
   }
 
+  /** Сигнатура текущего списка матчей — чтобы не пересобирать select заново. */
+  var renderedMatchIds = '';
+
   function renderMatchOptions() {
     if (!state.matches.length) {
       clear(el.matchSelect);
@@ -190,6 +196,7 @@
       empty.value = '';
       el.matchSelect.appendChild(empty);
       el.matchSelect.disabled = true;
+      renderedMatchIds = '';
       return;
     }
 
@@ -199,6 +206,24 @@
         : preferredMatch().id;
     state.matchId = resolved;
 
+    var signature = state.matches
+      .map(function (m) {
+        return m.id;
+      })
+      .join(',');
+
+    if (signature === renderedMatchIds) {
+      // Состав матчей не изменился — обновляем подписи на месте, чтобы не сбрасывать выбор.
+      for (var i = 0; i < state.matches.length; i += 1) {
+        if (el.matchSelect.options[i]) {
+          el.matchSelect.options[i].textContent = matchLabel(state.matches[i]);
+        }
+      }
+      el.matchSelect.value = resolved;
+      return;
+    }
+
+    renderedMatchIds = signature;
     clear(el.matchSelect);
     el.matchSelect.disabled = false;
     state.matches.forEach(function (match) {
@@ -253,7 +278,10 @@
       }
     }
 
-    var status = statusOf(match);
+    // Статус со страницы матча точнее, чем в списке: там «1-й период», «2-й период»,
+    // «Овертайм», а в списке — только «Не начался» или «Завершён».
+    var status = (detail && detail.status) || statusOf(match);
+    var liveNow = isLive(match) || /период|тайм|овертайм/i.test(status || '');
     var parts = [];
     if (status) parts.push('Статус: ' + status);
     if (detail && detail.score) parts.push('Счёт: ' + detail.score);
@@ -261,11 +289,11 @@
     el.broadcastFoot.textContent = parts.join(' · ');
 
     el.matchLink.href = (detail && detail.url) || match.url || '#';
-    el.matchStatus.textContent = isLive(match)
-      ? 'Идёт: ' + (match.status || '')
+    el.matchStatus.textContent = liveNow
+      ? 'Идёт: ' + (status || '')
       : status || 'матч не выбран';
-    el.matchStatus.classList.toggle('badge-live', isLive(match));
-    el.matchStatus.classList.toggle('badge-soon', !isLive(match) && startsSoon(match));
+    el.matchStatus.classList.toggle('badge-live', liveNow);
+    el.matchStatus.classList.toggle('badge-soon', !liveNow && startsSoon(match));
   }
 
   function renderComments() {
@@ -331,7 +359,7 @@
 
   /** Загружает список матчей: с бэкенда или из снимка. */
   function loadMatches(force) {
-    if (API_BASE) {
+    if (LIVE) {
       return getJson(API_BASE + '/api/matches').then(function (payload) {
         state.matches = payload.matches || [];
         state.today = payload.today || '';
@@ -350,7 +378,7 @@
 
   /** Загружает трансляцию выбранного матча. */
   function loadDetail(matchId, force) {
-    if (API_BASE) {
+    if (LIVE) {
       return getJson(API_BASE + '/api/match/' + matchId + (force ? '?refresh=1' : '')).then(function (
         payload,
       ) {
@@ -364,7 +392,7 @@
 
   /** Загружает комментарии выбранного матча. */
   function loadComments(matchId, force) {
-    if (API_BASE) {
+    if (LIVE) {
       return getJson(
         API_BASE + '/api/comments/' + matchId + (force ? '?refresh=1' : ''),
       ).then(function (payload) {
@@ -401,6 +429,7 @@
   function refreshBroadcast(force) {
     return loadMatches(force)
       .then(function () {
+        renderMatchOptions();
         return loadDetail(state.matchId, force);
       })
       .then(function () {
@@ -439,7 +468,20 @@
 
   /* -------------------------------------------------------------- events --- */
 
+  // Перестройка списка матчей заставляет браузер подставить соседний пункт и
+  // прислать change. Переключать матч можно только по явному действию пользователя.
+  el.matchSelect.addEventListener('pointerdown', function () {
+    state.userPickedMatch = true;
+  });
+  el.matchSelect.addEventListener('keydown', function () {
+    state.userPickedMatch = true;
+  });
   el.matchSelect.addEventListener('change', function () {
+    if (!state.userPickedMatch) {
+      el.matchSelect.value = state.matchId;
+      return;
+    }
+    state.userPickedMatch = false;
     state.matchId = el.matchSelect.value;
     try {
       window.location.hash = 'match-' + state.matchId;
