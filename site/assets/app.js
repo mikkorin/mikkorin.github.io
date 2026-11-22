@@ -126,7 +126,9 @@
     return fetch(url, { headers: { accept: 'application/json' } }).then(function (response) {
       return response.json().then(function (payload) {
         if (!response.ok) {
-          throw new Error(payload && payload.message ? payload.message : 'Ошибка запроса');
+          var error = new Error(payload && payload.message ? payload.message : 'Ошибка запроса');
+          error.status = response.status;
+          throw error;
         }
         return payload;
       });
@@ -395,9 +397,9 @@
           state.updatedAt = payload.updatedAt || null;
           state.snapshotMode = false;
         })
-        .catch(function () {
+        .catch(function (error) {
           // Живой API недоступен (например, заблокирован домен) — откатываемся на снимок.
-          state.liveBroken = true;
+          if (!error || error.status !== 404) state.liveBroken = true;
           return loadSnapshotMatches(force);
         });
     }
@@ -431,8 +433,8 @@
           state.updatedAt = payload.updatedAt || state.updatedAt;
           syncMatchFromDetail(matchId, state.detail);
         })
-        .catch(function () {
-          state.liveBroken = true;
+        .catch(function (error) {
+          if (!error || error.status !== 404) state.liveBroken = true;
           state.detail = state.details[matchId] || null;
         });
     }
@@ -453,8 +455,8 @@
           };
           state.updatedAt = payload.updatedAt || state.updatedAt;
         })
-        .catch(function () {
-          state.liveBroken = true;
+        .catch(function (error) {
+          if (!error || error.status !== 404) state.liveBroken = true;
           var failed = state.details[matchId] || null;
           state.comments = failed
             ? {
@@ -475,6 +477,7 @@
   /** Полное обновление: список, трансляция и комментарии. */
   function refreshAll(force) {
     return loadMatches(force).then(function () {
+      renderMatchOptions();
       el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, force), loadComments(state.matchId, force)]).then(
         function () {
@@ -491,6 +494,7 @@
   function refreshBroadcast(force) {
     return loadMatches(force)
       .then(function () {
+        renderMatchOptions();
         return loadDetail(state.matchId, force);
       })
       .then(function () {
@@ -616,6 +620,8 @@
       if (hashed && state.matches.some(function (m) { return m.id === hashed; })) {
         state.matchId = hashed;
       }
+      // renderMatchOptions определяет выбранный матч — без него детализация брала бы null.
+      renderMatchOptions();
       el.globalMeta.textContent = metaText();
       return Promise.all([loadDetail(state.matchId, false), loadComments(state.matchId, false)]).then(
         function () {
