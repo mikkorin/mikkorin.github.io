@@ -2,3 +2,5 @@ node_modules/
 public/
 .DS_Store
 *.log
+diag-status.mjs
+bench-parse.mjs
