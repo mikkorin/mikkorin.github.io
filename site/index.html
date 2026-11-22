@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Хоккей на Чемпионате — текстовые трансляции матчей КХЛ и комментарии с Championat.com"
+    />
+    <title>Хоккей на Чемпионате</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div>
+          <h1 class="app-title">Хоккей на Чемпионате</h1>
+          <p class="app-subtitle">
+            Текстовые трансляции матчей КХЛ и комментарии с Championat.com
+          </p>
+        </div>
+        <div class="app-actions">
+          <span class="meta" id="global-meta" role="status"></span>
+          <button class="btn btn-primary" id="refresh-all" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke-linecap="round" />
+              <path d="M21 3v6h-6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Обновить
+          </button>
+        </div>
+      </header>
+
+      <main>
+        <section aria-label="Матчи КХЛ">
+          <div class="match-picker" id="match-picker">
+            <label for="match-select">Матч КХЛ</label>
+            <select id="match-select" aria-describedby="match-status"></select>
+            <span class="badge" id="match-status">матч не выбран</span>
+            <a id="match-link" href="#" target="_blank" rel="noopener noreferrer">Страница матча</a>
+          </div>
+
+          <div class="panels">
+            <section class="panel" aria-labelledby="broadcast-title">
+              <header class="panel-head">
+                <h2 id="broadcast-title">Текстовая трансляция</h2>
+                <div class="panel-actions">
+                  <label class="sr-only" for="broadcast-interval">Интервал автообновления трансляции</label>
+                  <select class="interval-select" id="broadcast-interval">
+                    <option value="10000">10 сек</option>
+                    <option value="30000">30 сек</option>
+                    <option value="60000" selected>1 мин</option>
+                    <option value="0">Отключить</option>
+                  </select>
+                  <button class="btn" id="broadcast-refresh" type="button">Обновить</button>
+                </div>
+              </header>
+              <div class="panel-body" id="broadcast-body"></div>
+              <p class="panel-foot" id="broadcast-foot"></p>
+            </section>
+
+            <section class="panel" aria-labelledby="comments-title">
+              <header class="panel-head">
+                <h2 id="comments-title">Комментарии</h2>
+                <div class="panel-actions">
+                  <label class="sr-only" for="comments-interval">Интервал автообновления комментариев</label>
+                  <select class="interval-select" id="comments-interval">
+                    <option value="10000">10 сек</option>
+                    <option value="30000">30 сек</option>
+                    <option value="60000" selected>1 мин</option>
+                    <option value="0">Отключить</option>
+                  </select>
+                  <button class="btn" id="comments-refresh" type="button">Обновить</button>
+                </div>
+              </header>
+              <div class="panel-body" id="comments-body"></div>
+              <p class="panel-foot" id="comments-foot"></p>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer-note">
+        <p>
+          Данные: публичные страницы
+          <a href="https://www.championat.com/hockey/_superleague.html" target="_blank" rel="noopener noreferrer"
+            >championat.com</a
+          >. Снимок обновляется автоматически; время последнего обновления — в правом верхнем углу.
+        </p>
+      </footer>
+    </div>
+
+    <script src="assets/app.js" defer></script>
+  </body>
+</html>

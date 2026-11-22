@@ -1,0 +1,14 @@
+{
+  "name": "championat-pages",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Хоккей на Чемпионате — статическая версия для GitHub Pages",
+  "scripts": {
+    "build": "node scripts/fetch-data.mjs",
+    "serve": "npx --yes serve public"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
