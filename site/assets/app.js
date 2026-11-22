@@ -144,10 +144,15 @@
     return diff > 0 && diff <= SOON_WINDOW_MS;
   }
 
+  /** Матч идёт: идёт период, перерыв, буллит, овертайм. */
+  function isLiveStatus(status) {
+    return /период|тайм|таймаут|буллит|овертайм|перерыв/i.test(status || '');
+  }
+
   function isLive(match) {
     if (!match) return false;
     if (match.live) return true;
-    return /период|тайм/i.test(match.status || '');
+    return isLiveStatus(match.status);
   }
 
   /** Статус матча с учётом окна «скоро начнётся». */
@@ -291,7 +296,7 @@
     // Статус со страницы матча точнее, чем в списке: там «1-й период», «2-й период»,
     // «Овертайм», а в списке — только «Не начался» или «Завершён».
     var status = (detail && detail.status) || statusOf(match);
-    var liveNow = isLive(match) || /период|тайм|овертайм/i.test(status || '');
+    var liveNow = isLive(match) || isLiveStatus(status);
     var parts = [];
     if (status) parts.push('Статус: ' + status);
     if (detail && detail.score) parts.push('Счёт: ' + detail.score);
@@ -418,7 +423,7 @@
       if (detail.score) entry.score = detail.score;
       if (detail.status) {
         entry.status = detail.status;
-        entry.live = /период|тайм|овертайм/i.test(detail.status);
+        entry.live = isLiveStatus(detail.status);
       }
       return;
     }
